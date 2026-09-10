@@ -24,8 +24,13 @@ routine run that passes all gates.
   new function/variable so it can never collide with the existing image-queue
   code. Actions:
   - `generate_narration` - ElevenLabs TTS proxy (same API key as Tram AI,
-    different default voice: "Thanh Ngoc - Warm & Trusted Expert",
-    `Na15FlRRkMEDtEW4nVVP`). Body: `{"action":"generate_narration","text":"..."}`.
+    default voice changed 2026-09-10 per explicit user request to match
+    Tram AI's voice - "Khanh Lam" (northern accent), `RCmOaM1iiIH5xX3QXjIF`,
+    the SAME voice_id as Tram AI, same ElevenLabs API key. (Originally
+    launched with a separate Retain-only voice, "Thanh Ngoc - Warm & Trusted
+    Expert" / `Na15FlRRkMEDtEW4nVVP` - no longer used; pass `voice_id`
+    explicitly in every `generate_narration` call rather than relying on a
+    server-side default.) Body: `{"action":"generate_narration","text":"...","voice_id":"RCmOaM1iiIH5xX3QXjIF"}`.
   - `publish_facebook` - publishes a Facebook Reel via the Graph API
     `video_reels` 3-phase flow (start -> upload bytes -> finish), reusing the
     EXISTING `getConfig_()`/`getPageToken_()` helpers already in that script
@@ -93,25 +98,30 @@ auto-fixed -> STOP, do not narrate/build/publish, note it in the run summary.
 ## Video design (HyperFrames)
 
 - Brand tokens (`tokens.json`): colors `["#121212","#EED688","#F68822","#FFFFFF"]`,
-  font `Public Sans`. Logo lives in this repo at `assets/logo.png` (copied
-  from `/Users/quang/Desktop/Retain Agency/Logo.png` - the routine cannot read
+  font **Montserrat** (changed 2026-09-10 from Public Sans - see "Font" below
+  for why). Logo lives in this repo at `assets/logo.png` (copied from
+  `/Users/quang/Desktop/Retain Agency/Logo.png` - the routine cannot read
   Quang's Mac, so it must use the repo copy).
 - Pick a HyperFrames preset that fits a dark, premium/professional look
   (browse `hyperframes-creative` frame-presets at build time - do not
   hardcode one here; `blue-professional` is Tram AI's look, not Retain's).
-- Structure: 6 visual frames, Hook (script line 1) is voice-only and merged
-  into frame 1's audio (`ffmpeg concat` -> one intro audio file), no dedicated
-  Hook frame - same technique validated on Tram AI to avoid a dead/empty
-  opening 2-3s.
+- Structure: **7 visual frames** (changed 2026-09-10 - see "Hook pacing"
+  below): a dedicated Hook frame (~5-7s) always precedes the Context frame,
+  even though both can share one continuous voice take.
 - Apply the same 4 design upgrades proven on Tram AI, adapted to Retain's
   content types:
   1. Kicker (short all-caps label) on every frame naming its role in the
      narrative.
   2. Small fixed masthead watermark (Retain logo + wordmark) top-right from
      frame 2 onward; a full-size masthead reappears at the closing/CTA frame.
+     **Always the real `assets/logo.png` `<img>`, never a hand-drawn CSS
+     substitute** - see "Logo" below.
   3. If (and only if) a real photo is available (typically only in news-mode,
      from the sourced article) - reuse it in exactly one additional content
-     frame as a small rounded card with a photo credit, beyond frame 1.
+     frame as a small rounded card with a photo credit, beyond frame 1. When
+     no real photo/HeyGen access is available, prefer a simple invented
+     chart/icon (bar comparison, count-up stat, small line icon) over dense
+     paragraphs of text on any frame presenting a statistic.
   4. Any frame with a central statistic (a percentage, a formula result, a
      cost figure) animates it with a GSAP count-up tween - never a duplicate
      giant faint background numeral behind it (tried once on Tram AI, reads
@@ -123,6 +133,118 @@ auto-fixed -> STOP, do not narrate/build/publish, note it in the run summary.
 - Facebook caption posted alongside the video: short title + 2-4 sentences +
   the Retain standard sign-off block (Hotline/Zalo/Website/Email - see
   `RETAIN-COMPLIANCE-GATE.md`).
+
+### Font (locked in 2026-09-10, do not revert to a naive fetch)
+
+The first published video shipped with visibly broken Vietnamese diacritics
+(acute/grave/circumflex marks rendering as a detached box/flag shape on
+letters like "tot", "ve"). Root cause: `@font-face` was self-hosted from a
+Google Fonts `css2` fetch made with a **modern** `curl` User-Agent, which
+returns ONE merged variable-font woff2 file covering every weight but only
+the `latin` unicode-range subset - the `vietnamese` subset block (needed for
+precomposed characters like U+1EA0-1EF9) is silently missing, so the browser
+falls back to a different font for accented glyphs mid-word. `npm run check`
+does not catch this (it is not a lint-detectable failure - the font "loads"
+fine, it just doesn't cover the codepoints used).
+
+**Fix, now standard for every Retain video:**
+1. Fetch with an OLD Chrome User-Agent (e.g. `Mozilla/5.0 (Windows NT 6.1)
+   AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36`)
+   against `https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap`
+   - this returns separate static files per weight AND per subset
+   (`latin`, `latin-ext`, `vietnamese`, `cyrillic`, ...).
+2. Keep only the `latin` and `vietnamese` blocks per weight (10 blocks for 5
+   weights), download each woff2, self-host under `assets/fonts/`.
+3. Write all 10 `@font-face` rules (same `font-family`/`weight`, each with its
+   own `unicode-range` copied verbatim from the fetched CSS) into every frame
+   file. Never drop the `unicode-range` line - without it the two rules for
+   the same weight conflict and only the last-declared one wins for every
+   character.
+4. Reference fonts with a project-root-relative path (`assets/fonts/...`),
+   consistent with how `hyperframes-core` resolves all asset paths.
+5. Visually zoom into rendered frames containing Vietnamese tone marks
+   (acute/grave/hook/tilde/dot-below) and circumflex/breve letters before
+   considering a font swap done - this class of bug is invisible in
+   plain-text review of the HTML source.
+
+Font family is now **Montserrat** (matches Bot Ban Hang / Tram AI's proven
+system) instead of Public Sans - do this same latin+vietnamese self-host
+procedure for whatever font a future rebrand picks; the procedure is the
+point, not the specific family name.
+
+### Logo (locked in 2026-09-10)
+
+Never build the Retain mark out of CSS (a rounded square + letter "R", a
+colored dot, etc.) as a stand-in "for now" - the first published video did
+exactly this, and it visibly does not match the real hexagon mark (black
+fill, gold border, gold serif "R") once a side-by-side comparison is made.
+Always render the actual file: `<img src="assets/logo.png" alt="Retain
+Agency" />` at whatever size the masthead slot needs (small corner ~24px,
+closing masthead ~64px), `object-fit: contain`, small `border-radius` to
+soften the corner without clipping the hexagon. There is no acceptable
+placeholder for a real, already-available brand asset - if the logo file is
+ever missing from the repo, stop and flag it rather than drawing a
+substitute.
+
+### Hook pacing (locked in 2026-09-10, overrides the earlier "merged, no
+dedicated Hook frame" note above for any hook+context pair longer than ~10s)
+
+The first published video merged the Hook line (script line 1) into Frame
+1's audio with Context (script line 2), producing one 18s frame with a
+single static reveal, then nothing changing on screen for the remaining
+~17s while the voiceover kept talking. This reads as a dead/frozen opening
+and was the single biggest viewer-facing complaint on the first publish.
+
+**Fix:** always give the Hook its own frame (target 5-7s), separate from
+Context, even when both lines are read as one continuous ElevenLabs take.
+Do NOT re-run TTS twice or introduce a pause in the read - cut the single
+audio file into two pieces at the natural sentence-boundary timestamp
+(available for free from the `/v1/text-to-speech/{id}/with-timestamps`
+character-level alignment already used for the single-continuous-take
+method) with ~0.05-0.12s of padding on each side. The voice stays one
+uninterrupted take; only the on-screen frame changes at that boundary. If a
+future script's Hook+Context naturally reads under ~10s total, merging into
+one frame remains acceptable (matches the original Tram AI finding); split
+whenever the combined read is materially longer than that.
+
+### BGM level (locked in 2026-09-10, tighter than the general Tram AI note)
+
+The Tram AI-wide BGM guidance ("~0.11 relative volume, 0.06 too quiet, 0.12+
+risks overpowering on a busier track" - see the equivalent Tram AI
+production-rules note) undersells the risk for a track like
+`news-broadcast.mp3`, which has real drum/bass transient hits reaching
+0dB even though its long-run average loudness (`ffmpeg -af volumedetect`)
+measures the SAME as the narration's average loudness. A flat 0.13 gain
+(within the "documented safe" range) was still reported as overpowering the
+voice on the first publish - the transient peaks punch through a simple
+linear-gain mix even when the smoothed average sits far enough below the
+voice.
+
+**Fix:** for any bed with audible drum/bass hits (not a smooth pad/ambient
+bed), (1) lightly compress/limit the bed file itself before mixing
+(`ffmpeg -af "acompressor=threshold=-18dB:ratio=6:attack=8:release=250,alimiter=limit=-6dB"`)
+to tame the transients, and (2) keep the `audio_meta.json` bgm `volume` at
+**0.06-0.08**, not the general 0.11 figure. `/hyperframes-audio`'s
+voiceover-carve mechanism (`data-fx-carve` on the bed track, sidechained to
+the voice) is the more correct long-term fix for this exact "busy bed fights
+voice" problem and is worth wiring in properly for a future revision - a
+lower static volume plus light compression is the interim fix, not the
+final word on it.
+
+### Text-box height (reinforcing the existing Layer-1 rule below with a concrete miss)
+
+A headline container height was copy-pasted from an earlier single-line
+design (130px) onto a new two-line headline at the same font-size, and
+`npm run check`'s layout pass did NOT catch it - the checker flags a text
+box overflowing its OWN declared bounds in some cases, but does not reliably
+catch that overflowing text visually collides with a DIFFERENT sibling
+element positioned below it (here: the headline's second line rendering on
+top of a card's rounded border). Whenever a headline's line-count is
+uncertain (switching fonts, tightening/loosening copy, changing font-size),
+recompute its container height against the FORMULA below for the ACTUAL
+render, and always extract a real screenshot of that specific frame's
+settled state to confirm the next element below it has clear space - do not
+trust "the lint check passed" as proof there is no overlap with a sibling.
 
 ## QC (embed the 9-step process proven on Tram AI, in full)
 
