@@ -275,3 +275,131 @@ the 8.5d image QC), or the GitHub raw URL does not return HTTP 200 after one
 30s retry. In every stop case, write a clear reason to the run summary and do
 not touch `video-content-plan-state.json`'s rotation counters - leave them
 exactly as they were so the next run retries the same slot cleanly.
+
+
+## Lessons imported from the "Tin Tuc So" sibling channel (2026-09-15)
+
+A full technical guide for a sibling news channel ("Tin Tuc So", repo `quangnv-cloud/tin-tuc-so`,
+8 real videos analyzed) was reviewed against this project. Same brand architecture (Montserrat
+latin+vietnamese self-host, 7-act vertical 1080x1920, GSAP timeline-per-frame, HyperFrames). Where
+their proven practice is stricter or more mature than what Retain currently does, adopt it going
+forward - these are now standing rules, not suggestions to revisit later.
+
+### No emoji, ever - CSS/SVG shapes only
+
+The first Retain video used Unicode glyphs for icons (`&#128172;` speech-bubble, `&#10003;`
+checkmark) in the CTA frame. These happened to render correctly on this Mac's local Chromium
+render because a system emoji font was present - but a bare cloud render sandbox (where the
+eventual RemoteTrigger routine runs) may have no emoji-capable font installed at all, silently
+dropping the glyph. Tin Tuc So's rule, proven across 9 real projects with zero exceptions: **build
+every icon as a CSS shape or inline SVG**, never an emoji character. Reusable recipes:
+- Checkmark: a rotated `::after` box using `border-top` + `border-right` (see the "up" icon in
+  their CTA template), or a short 2-segment SVG path.
+- Speech bubble (comment CTA icon): a rounded-corner square with one corner sharp
+  (`border-radius: 12px 12px 12px 4px` - the sharp corner reads as the bubble's tail) plus 2 short
+  horizontal bars (`::before` + `box-shadow`) simulating lines of text.
+- Warning triangle: pure CSS triangle (`border-left`/`border-right` transparent + `border-bottom`
+  solid) with a `::after` "!" centered on it.
+Retroactively replace the two emoji glyphs already in `07-cta.html` with CSS equivalents before
+the next render.
+
+### Brand Anchor (logo + name) belongs at the ROOT composition, not duplicated per frame
+
+Retain's first video nests a small masthead (`<img class="f{N}-wm-logo">` + "RETAIN" text) inside
+EVERY frame file (2 through 7) - 6 copies of near-identical markup, each re-running its own fade-in
+reveal on every scene cut. Tin Tuc So's proven pattern is architecturally simpler and more correct:
+one `#brand-anchor` block lives directly in `index.html` (a sibling of the 7 `.clip`/`.scene` act
+divs), starts at `opacity: 0`, and the ONLY animation on it is a single
+`tl.set('#brand-anchor', { opacity: 1 }, <hook's data-duration>)` in the root script - it appears
+once, right when the Hook frame ends, and stays visible unchanged for the rest of the video. Adopt
+this for the next Retain video: move the logo+wordmark (small corner) and the "Nguon: ..."-style
+badge (if Retain ever needs one) into `index.html` itself, delete the per-frame duplicates, and
+keep only the Hook frame's own full masthead treatment (which legitimately needs its own build-in
+reveal, per the existing Hook design) and the CTA frame's closing full-size signature (which is a
+deliberate SECOND, later brand beat, not the same element).
+
+### Vendor GSAP locally, do not rely on a CDN `<script src>`
+
+Every one of Tin Tuc So's 9 real projects (including their reference template) ships
+`assets/vendor/gsap.min.js` - copied from `node_modules/gsap/dist/gsap.min.js` after `npm i gsap`
+- specifically because a common CDN host is blocked at their cloud sandbox's network egress. Retain
+currently loads GSAP from `cdnjs.cloudflare.com` via `<script src>` in every frame file. This has
+worked fine locally and on Tram AI's cloud routine so far, but it is an unverified assumption for
+Retain's own future RemoteTrigger routine - vendor GSAP locally (`assets/vendor/gsap.min.js`,
+committed to the repo) before that routine goes live, removing the external-network dependency
+entirely rather than hoping the CDN stays reachable.
+
+### Vertical-fill QC: measure pixels, do not eyeball a compressed screenshot
+
+The existing "no empty bottom third" rule stays, but the verification METHOD upgrades. Tin Tuc So
+hit two real bugs that eyeballing missed or mis-caught:
+1. A ring-progress data frame was genuinely too small (620px) and left the bottom ~35% empty -
+   only caught by measuring the actual pixel row of the last visible content against the
+   background color on a frame extracted from the RENDERED .mp4 (not the Studio preview thumbnail).
+2. A leaderboard frame's content looked fine on paper but its GSAP reveal hadn't finished by the
+   sample timestamp (sampled at act-MIDDLE), so the extracted frame under-reported real content -
+   fixed by re-sampling near the act's END instead, and separately, a suspected clipped closing
+   logo on the CTA frame turned out to be a false alarm caused by a compressed preview image, only
+   resolved by measuring the real render with PIL.
+**New standing QC step**: when checking vertical fill on any future Retain frame, extract the
+sample from a timestamp near the END of that frame's own `data-duration` (not the middle), and when
+in doubt whether content reaches the safe zone, measure it (a quick Python/PIL script scanning rows
+against the `#121212` background) rather than trusting a compressed screenshot by eye. Target for
+Retain's 1920px canvas: last content element's bottom edge lands between roughly 73% and 87% of
+frame height (matches Tin Tuc So's observed 1400-1680px band on their own 1920px canvas).
+
+### BGM mood: prefer genuinely calm/ambient, do not fight a busy track with volume alone
+
+Tin Tuc So's own brand rule exists BECAUSE of user feedback identical to what Retain's user gave on
+the first BGM choice ("too much rhythm, overpowers the voice"): their fix was not a lower volume on
+a busy track, it was picking a fundamentally calmer track at the SOURCE. Their Lyria prompt:
+`"calm ambient news underscore, soft synth pads, sparse, minimal pulse, no drums, instrumental
+only"`, with a mandatory negative-prompt excluding `drums, heavy beat, aggressive percussion, busy
+rhythm, loud, driving, energetic, buildup, drop` (in addition to vocals/lyrics). Retain reused Tram
+AI's energetic `news-broadcast.mp3` and had to compress + drop its mix volume to 0.06-0.08 to make
+it work - functional, but fighting the wrong track. **For the next Retain video's BGM, prefer a
+genuinely sparse/ambient bed with no drum hits** (generate via Lyria with the negative-prompt above
+once `GEMINI_API_KEY` is available in the build environment, or source a comparably calm track)
+rather than reusing an energetic bed and taming it after the fact.
+
+### Wire up `carve.mjs` for real ducking - stop treating it as a future TODO
+
+Tin Tuc So runs this in production on every video, not as an aspiration:
+```
+node ~/.claude/skills/hyperframes-audio/scripts/carve.mjs --comp index.html --strength 0.4
+```
+(lower than the tool's own default of 0.8, because their BGM is already mixed quiet - the same
+logic applies to Retain's quiet 0.06-0.08 BGM). This writes `data-fx-carve` / `data-fx-chain` /
+`data-automation` onto the `<audio id="...bgm...">` element automatically - never hand-write those
+3 attributes. It requires every voice `<audio>` to carry `data-audio-group="voiceover"` (already
+straightforward to add). **Run carve.mjs after every timing or audio change** - a stale carve
+result desyncs from the new timing. Use this instead of (or in addition to) the interim flat-volume
+fix on the next Retain video.
+
+### Animate focal numbers with a count-up, even inside a bar/leaderboard layout
+
+Retain's "Support" frame (CTR/CPC bar comparison) shows "+27%"/"-26%" as static text next to
+animated bar fills. Tin Tuc So's convention, observed with zero exceptions across every "data
+moment" act regardless of visual metaphor (single big number, leaderboard, ring, line-chart): the
+number itself is ALWAYS a GSAP-tweened plain JS object (`{v: 0}`, never tweening a DOM element
+directly) with `onUpdate` writing `Math.round(v).toLocaleString('vi-VN')` into the target span -
+even when it sits next to a bar/track that is separately animating its own fill. Add this to the
+next Retain video's focal stat number(s) for a livelier data moment, not just static text beside a
+moving bar.
+
+### Compliance gate additions worth mirroring for Retain's news-mode slot
+
+`RETAIN-COMPLIANCE-GATE.md` currently covers the banned-phrase list, case-study labeling, and tone.
+Tin Tuc So's gate (same news-sourcing risk profile as Retain's news-mode slot) adds two clauses
+Retain's doc does not yet have - both apply directly whenever a Retain video sources a real
+external news item:
+- **AI/synthetic media**: an AI-generated image may illustrate a concept (a diagram, an icon, an
+  abstract graphic) freely, but must NEVER recreate a real event or a real person photorealistically
+  as if it were an actual photograph of that event - use a real photo (with credit) or an explicit
+  concept illustration instead, never a fabricated "photo".
+- **Originality / not mass-produced**: every video must carry at least one distinct angle, analysis,
+  or presentation choice - never just restate a headline. This is flagged as the single highest
+  platform-policy risk for any automated multi-video-per-day channel (Meta/YouTube "inauthentic /
+  mass-produced" detection).
+Add both clauses to `RETAIN-COMPLIANCE-GATE.md` before the news-mode slot starts running
+unattended.
