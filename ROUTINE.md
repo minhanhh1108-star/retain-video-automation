@@ -7,10 +7,20 @@ authoritative over its own embedded summary of the steps.
 
 ## Goal
 
-Produce and publish a short vertical (1080x1920) faceless-explainer video as a
-Facebook Reel on the Retain Agency Page, fully automated, 3 times per day
-(07:00 / 12:00 / 19:00 Asia/Ho_Chi_Minh), with no human in the loop for a
-routine run that passes all gates.
+Produce and publish a short vertical (1080x1920) faceless-explainer video
+sourced from real, recent Vietnamese-market marketing/advertising news, fully
+automated, 2 times per day (07:00 / 19:00 Asia/Ho_Chi_Minh), published to BOTH
+the Retain Agency Facebook Page (Reel) AND the Retain Agency YouTube channel
+(Short), with no human in the loop for a routine run that passes all gates.
+
+**Schedule change (2026-09-15):** this replaces the earlier 3x/day plan (07:00
+/ 12:00 / 19:00, 2 pillar-education slots + 1 news slot, Facebook only). The
+pillar-education rotation is retired for this routine; every slot is now
+news-mode. `video-content-plan-state.json`'s `pillars_rotation` /
+`next_pillar_index` fields are frozen as of this change (kept in the file for
+history, no longer advanced) - only `topics_used`/`posts_log` and the new
+`youtube_posts_log`-equivalent tracking stay live. See "YouTube publishing"
+below for the setup this change depends on before it can go live for real.
 
 ## Infrastructure (separate from Tram AI on purpose)
 
@@ -39,6 +49,19 @@ routine run that passes all gates.
     Dedup/log lives in a new Sheet tab `video_posts_log` inside the SAME bound
     Spreadsheet ("Retain Agency - Theo doi Fanpage") - separate from
     `Hang cho dang`/`Bai dang` used by the image pipeline.
+  - `publish_youtube` - **NOT YET BUILT (blocked on OAuth setup, see "YouTube
+    publishing" section below).** Once credentials exist, mirrors the same
+    pattern as Tram AI/Tin Tuc So's YouTube action: `videos.insert` (Data API
+    v3, `multipart/form-data` resumable-ish upload via `UrlFetchApp`) using a
+    refresh token stored in this script's own Script Properties
+    (`YT_CLIENT_ID`, `YT_CLIENT_SECRET`, `YT_REFRESH_TOKEN`, `YT_CHANNEL_ID`),
+    exchanged for a short-lived access token at the start of every call (do
+    not cache the access token across routine runs). Body shape (planned):
+    `{"action":"publish_youtube","video_url":"<raw github url>","title":"...","description":"...","tags":[...],"video":"<slug>"}`.
+    Same `video_posts_log` Sheet tab records both platforms' post IDs for one
+    `video` slug (two columns: `facebook_post_id`, `youtube_video_id`) so a
+    partial failure (one platform succeeds, the other fails) is visible and
+    not silently retried as a full duplicate.
 - Same calling convention as every Apps Script Web App: POST returns a 302
   redirect even on success - read the `Location` header, then GET that URL to
   get the real JSON. Example:
@@ -55,35 +78,105 @@ routine run that passes all gates.
   uses. There is no pre-scheduling for video; each routine run produces and
   posts the same run.
 
-## Content rotation (2 pillar slots + 1 news slot per day)
+## Content rotation (news-mode only, both daily slots - changed 2026-09-15)
 
 State lives in `video-content-plan-state.json` in this repo (NOT on Quang's
 Mac - the cloud routine has no access to `/Users/quang/Desktop/Retain Agency/`).
 Read it, decide, then git commit the updated state back at the end of a
 successful run (mirrors how COMPLIANCE.md / media files are committed).
 
-- **07:00 and 12:00 slots -> pillar mode.** Take the next pillar in
-  `pillars_rotation` at `next_pillar_index` (wrap around after F). Pick one
-  topic not yet in `topics_used` (and, as a soft check, not recently used in
-  `recent_image_topics_snapshot_2026_09_09` either, to avoid the image and
-  video feeds feeling repetitive in the same week) - for `A_thuat_ngu_nang_cao`
-  pull from `glossary_upcoming_suggestions` (move it to `glossary_done` after
-  use); for `B_cap_nhat_nen_tang` and `F_xu_huong`, WebSearch is REQUIRED (real,
-  recent Meta Ads / Facebook Marketing API news) - do not invent a platform
-  change or trend; for `D_case_study`, the video MUST state on-screen and in
-  the script that it is an illustrative example, not a real client's numbers
-  (same rule as the image pipeline).
-- **19:00 slot -> news mode.** WebSearch for one real, recent (last few days)
-  piece of digital-marketing / Meta Ads / Facebook advertising news (English
-  or Vietnamese sources both fine - prefer Meta Business newsroom, Search
-  Engine Journal, Social Media Today, or a Vietnamese tech/marketing outlet if
-  directly relevant). Apply the same Gate A/B screening as pillar content
-  before committing to a topic.
-- After a successful publish, append to `topics_used`/`posts_log`, advance
-  `next_pillar_index` (pillar slots only - news-mode runs do not consume a
-  pillar slot), increment `next_video_number`, and commit
-  `video-content-plan-state.json` back to this repo (`git pull --rebase` first
-  to avoid races between the three daily runs).
+- **Both the 07:00 and 19:00 slots run news mode.** There is no pillar slot
+  anymore - `pillars_rotation`/`next_pillar_index` are frozen (kept for
+  history only, see the Goal section's 2026-09-15 note).
+- WebSearch for one real, recent (last few days, prefer last 24-48h so the
+  07:00 and 19:00 runs on the same day do not converge on the same story)
+  piece of Vietnamese-market marketing/advertising news: Meta/Facebook Ads
+  platform changes, TikTok Ads, Google Ads Vietnam, e-commerce advertising
+  trends, a notable Vietnamese brand campaign, or a relevant regulatory/policy
+  update (e.g. Nghi dinh quang cao, data-privacy rules affecting ad targeting)
+  - prefer sources with clear local relevance: Vietnamese tech/marketing
+  outlets (Advertising Vietnam, Brands Vietnam, Vietcetera, ICTnews, VnExpress
+  Kinh doanh) or the Vietnamese coverage of a global platform announcement.
+  Do not invent a platform change, statistic, or trend - every factual claim
+  in the script must trace to the sourced article.
+- Cross-check against `topics_used` AND the last 3-4 days of `posts_log` for
+  both slots so the 07:00 and 19:00 videos on the same day, and consecutive
+  days, do not restate the same story - if the only strong candidate story was
+  already covered within the last 3 days, either find a distinct angle on it
+  (not just a restatement - see the originality/B7 compliance clause) or pick
+  a second, less prominent but still real story instead of skipping the slot.
+- Apply the same Gate A/B screening as before, PLUS the two clauses added to
+  `RETAIN-COMPLIANCE-GATE.md` on 2026-09-15 specifically for this news-only
+  mode: AI/synthetic-media handling (real photo with credit or explicit
+  concept illustration, never a fabricated photorealistic recreation of a real
+  event/person) and originality (must add a distinct angle, not just restate
+  the headline).
+- After a successful publish, append to `topics_used`/`posts_log` (recording
+  BOTH `facebook_post_id` and `youtube_video_id` for the run, or whichever one
+  succeeded if the other platform failed - see "YouTube publishing" below),
+  increment `next_video_number`, and commit `video-content-plan-state.json`
+  back to this repo (`git pull --rebase` first to avoid races between the two
+  daily runs).
+
+## YouTube publishing (added 2026-09-15, BLOCKED - needs one-time setup from Quang)
+
+The 2026-09-15 schedule change adds YouTube (Shorts) as a second publish
+target alongside Facebook, for the SAME video render each run (one build, two
+uploads). This cannot go live until the following one-time setup is done
+against the Google account that owns the already-created Retain Agency
+YouTube channel - none of this can be done by the routine or by Claude on
+Quang's behalf, since it requires Quang's own Google sign-in and consent:
+
+1. **Google Cloud project + API enablement.** In https://console.cloud.google.com,
+   pick or create a project, then enable "YouTube Data API v3" for it
+   (APIs & Services -> Library -> search "YouTube Data API v3" -> Enable).
+   Can reuse an existing project (e.g. the one behind Tram AI's own YouTube
+   action, if it has one) or a fresh Retain-only project - either works, they
+   are independent credential sets either way.
+2. **OAuth consent screen.** APIs & Services -> OAuth consent screen. Choose
+   "External" unless the Google account is on a Workspace with "Internal"
+   available. Fill the minimum required fields (app name e.g. "Retain Video
+   Automation", support email, developer contact email). Leave it in
+   **Testing** mode for now (fastest path) - the tradeoff, already accepted
+   for Tram AI's own YouTube publishing: a Testing-mode refresh token expires
+   after roughly 7 days of the consuming app being unverified, requiring a
+   quick manual re-mint (step 4 below, repeated) about once a week. Publishing
+   the app for verification removes this but takes Google review time and
+   normally needs a privacy policy URL and a demo video of the OAuth flow -
+   worth doing later once the channel is running, not a blocker to start.
+3. **OAuth2 Client ID.** APIs & Services -> Credentials -> Create Credentials
+   -> OAuth client ID -> Application type "Web application". Add
+   `https://developers.google.com/oauthplayground` as an Authorized redirect
+   URI (this is what lets step 4 mint a refresh token without writing a custom
+   consent-handling page). Save the generated **Client ID** and **Client
+   Secret** - both are needed as Script Properties on the Apps Script project
+   (`YT_CLIENT_ID`, `YT_CLIENT_SECRET`).
+4. **Refresh token via OAuth Playground.** Go to
+   https://developers.google.com/oauthplayground, click the gear icon -> check
+   "Use your own OAuth credentials" -> paste the Client ID/Secret from step 3.
+   In the scope list, select `https://www.googleapis.com/auth/youtube.upload`
+   (and optionally `https://www.googleapis.com/auth/youtube` for broader
+   metadata access) -> Authorize APIs -> **sign in with the exact Google
+   account that owns the Retain Agency YouTube channel** (not any other
+   account) -> Exchange authorization code for tokens. Copy the **Refresh
+   token** shown - this is the long-lived credential
+   (`YT_REFRESH_TOKEN` Script Property); the access token shown alongside it
+   is short-lived and not needed, the Apps Script action exchanges the refresh
+   token for a fresh access token on every call.
+5. **Channel confirmation.** Send the channel's URL or handle so the
+   `publish_youtube` action can be built/tested against the right
+   `YT_CHANNEL_ID` (needed mainly for verification, uploads via
+   `videos.insert` target whichever channel the authenticated account owns -
+   if the Google account has more than one channel, the channel ID must be
+   set explicitly on the upload call, so confirm this either way).
+
+Once all 4 Script Properties above exist on the "Retain Agency - Theo doi
+Fanpage" Apps Script project, the `publish_youtube` action described in
+"Infrastructure" above gets built and smoke-tested (upload one short test
+video as **Unlisted**, confirm it appears on the right channel, then delete
+it) before being wired into the live routine. Until then, this routine can
+only be made live for the Facebook half; do not schedule the two-platform
+cron until this section says done.
 
 ## Compliance
 
