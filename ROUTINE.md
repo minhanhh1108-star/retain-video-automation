@@ -118,65 +118,54 @@ successful run (mirrors how COMPLIANCE.md / media files are committed).
   back to this repo (`git pull --rebase` first to avoid races between the two
   daily runs).
 
-## YouTube publishing (added 2026-09-15, BLOCKED - needs one-time setup from Quang)
+## YouTube publishing (added 2026-09-15, DONE as of 2026-09-15 - action built, tested, live)
 
-The 2026-09-15 schedule change adds YouTube (Shorts) as a second publish
-target alongside Facebook, for the SAME video render each run (one build, two
-uploads). This cannot go live until the following one-time setup is done
-against the Google account that owns the already-created Retain Agency
-YouTube channel - none of this can be done by the routine or by Claude on
-Quang's behalf, since it requires Quang's own Google sign-in and consent:
+`publish_youtube` is built and smoke-tested (test upload confirmed on the
+correct "Retain Agency" channel, Unlisted, then deleted by Quang). Script
+Properties `YT_CLIENT_ID`, `YT_CLIENT_SECRET`, `YT_REFRESH_TOKEN` are set on
+the "Retain Agency - Theo doi Fanpage" Apps Script project (same OAuth
+consent screen as Tram AI's own YouTube action, status "En production" - no
+Testing-mode 7-day refresh-token expiry to worry about for this app).
 
-1. **Google Cloud project + API enablement.** In https://console.cloud.google.com,
-   pick or create a project, then enable "YouTube Data API v3" for it
-   (APIs & Services -> Library -> search "YouTube Data API v3" -> Enable).
-   Can reuse an existing project (e.g. the one behind Tram AI's own YouTube
-   action, if it has one) or a fresh Retain-only project - either works, they
-   are independent credential sets either way.
-2. **OAuth consent screen.** APIs & Services -> OAuth consent screen. Choose
-   "External" unless the Google account is on a Workspace with "Internal"
-   available. Fill the minimum required fields (app name e.g. "Retain Video
-   Automation", support email, developer contact email). Leave it in
-   **Testing** mode for now (fastest path) - the tradeoff, already accepted
-   for Tram AI's own YouTube publishing: a Testing-mode refresh token expires
-   after roughly 7 days of the consuming app being unverified, requiring a
-   quick manual re-mint (step 4 below, repeated) about once a week. Publishing
-   the app for verification removes this but takes Google review time and
-   normally needs a privacy policy URL and a demo video of the OAuth flow -
-   worth doing later once the channel is running, not a blocker to start.
-3. **OAuth2 Client ID.** APIs & Services -> Credentials -> Create Credentials
-   -> OAuth client ID -> Application type "Web application". Add
-   `https://developers.google.com/oauthplayground` as an Authorized redirect
-   URI (this is what lets step 4 mint a refresh token without writing a custom
-   consent-handling page). Save the generated **Client ID** and **Client
-   Secret** - both are needed as Script Properties on the Apps Script project
-   (`YT_CLIENT_ID`, `YT_CLIENT_SECRET`).
-4. **Refresh token via OAuth Playground.** Go to
-   https://developers.google.com/oauthplayground, click the gear icon -> check
-   "Use your own OAuth credentials" -> paste the Client ID/Secret from step 3.
-   In the scope list, select `https://www.googleapis.com/auth/youtube.upload`
-   (and optionally `https://www.googleapis.com/auth/youtube` for broader
-   metadata access) -> Authorize APIs -> **sign in with the exact Google
-   account that owns the Retain Agency YouTube channel** (not any other
-   account) -> Exchange authorization code for tokens. Copy the **Refresh
-   token** shown - this is the long-lived credential
-   (`YT_REFRESH_TOKEN` Script Property); the access token shown alongside it
-   is short-lived and not needed, the Apps Script action exchanges the refresh
-   token for a fresh access token on every call.
-5. **Channel confirmation.** Send the channel's URL or handle so the
-   `publish_youtube` action can be built/tested against the right
-   `YT_CHANNEL_ID` (needed mainly for verification, uploads via
-   `videos.insert` target whichever channel the authenticated account owns -
-   if the Google account has more than one channel, the channel ID must be
-   set explicitly on the upload call, so confirm this either way).
+Body shape (implemented): `{"action":"publish_youtube","video_url":"<raw
+github url>","title":"...","description":"...","tags":[...],"video":"<slug>",
+"privacy":"public"}` - **always pass `"privacy":"public"` explicitly for a
+real routine run** (the action's own default, if omitted, is `unlisted` -
+that default exists only so a manual test call can't accidentally go public;
+every real routine publish must set it explicitly or the video stays hidden
+forever). Returns `{"youtube_video_id":"...","youtube_url":"..."}`.
 
-Once all 4 Script Properties above exist on the "Retain Agency - Theo doi
-Fanpage" Apps Script project, the `publish_youtube` action described in
-"Infrastructure" above gets built and smoke-tested (upload one short test
-video as **Unlisted**, confirm it appears on the right channel, then delete
-it) before being wired into the live routine. Until then, this routine can
-only be made live for the Facebook half; do not schedule the two-platform
-cron until this section says done.
+The two-platform cron IS live (both daily routines call `publish_facebook`
+AND `publish_youtube` for the same render). See "Routine environment
+bootstrap" below for the one real gap this surfaced on first run: the cloud
+container has no HyperFrames tooling pre-installed.
+
+## Routine environment bootstrap (added 2026-09-16, root-caused a failed run)
+
+**The RemoteTrigger cloud container starts with NOTHING HyperFrames-related
+installed** - no `hyperframes-creative`/`hyperframes-audio` skills, no GSAP,
+no project scaffold, not even the `hyperframes` CLI itself. This is normal
+(it is a fresh sandbox every run, per-run installs are expected, same as
+Tram AI's own routine), but a routine prompt that only says "dung video bang
+HyperFrames" in prose - trusting the agent to already know how - will
+correctly conclude the tooling is missing and STOP rather than install it.
+This happened on the first real 19:00 run (2026-09-15): the agent read this
+file, correctly identified every locked-in design rule, but never attempted
+`npx hyperframes` because nothing told it to.
+
+**Fix: every routine prompt must explicitly spell out the bootstrap
+commands**, not just reference the workflow by name:
+```bash
+npx hyperframes init "/tmp/<slug>" --non-interactive --example=blank --skill=faceless-explainer
+```
+If that reports the skill is missing/stale: `npx hyperframes skills update
+faceless-explainer` first, then retry `init`. Build the actual project under
+`/tmp/<slug>` (NOT inside the git-cloned repo directory - the repo only
+receives the FINAL rendered `video.mp4`/`thumbnail.jpg`, copied over after
+render, per "Infrastructure" above). After `npm run render`, copy
+`/tmp/<slug>/renders/{video.mp4,thumbnail.jpg}` into this repo's
+`videos/<slug>/`, then commit/push/verify-200/publish as already documented.
+
 
 ## Compliance
 
