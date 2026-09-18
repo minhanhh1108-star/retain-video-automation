@@ -10,7 +10,7 @@
     "F_xu_huong"
   ],
   "next_pillar_index": 0,
-  "next_video_number": 5,
+  "next_video_number": 6,
   "glossary_done": [
     "Business Manager",
     "Tai khoan quang cao",
@@ -61,7 +61,8 @@
     "Video ngan (Reels) vs anh tinh - xu huong quang cao 2026 (news mode)",
     "TikTok Shop x Bo Cong Thuong - sang kien Beyond Vietnam - Hang Viet Cat Canh (news mode)",
     "Kinh Do - chien dich AI \"Bao Tang Ky Uc Trung Thu\" Trung Thu 2026 (news mode)",
-    "TikTok Shop ra mat chuong trinh dao tao nguoi ban hang \"Hoi Chu Chot\" - phoi hop Cuc TMDT & KTS (Bo Cong Thuong) va VECOM (news mode)"
+    "TikTok Shop ra mat chuong trinh dao tao nguoi ban hang \"Hoi Chu Chot\" - phoi hop Cuc TMDT & KTS (Bo Cong Thuong) va VECOM (news mode)",
+    "Bo VHTTDL xu ly vi pham quang cao tren mang 6 thang dau 2026 - 494 ten mien bi chan, 65 giay phep thu hoi, quy dinh moi ve tu 'nhat/duy nhat/tot nhat' (news mode)"
   ],
   "posts_log": [
     {
@@ -115,6 +116,20 @@
       "facebook_video_id": "953907211102254",
       "youtube_video_id": "eW4aSkgRkx8",
       "youtube_url": "https://youtube.com/shorts/eW4aSkgRkx8",
+      "status": "published"
+    },
+    {
+      "video_number": 5,
+      "date": "2026-09-18",
+      "slot": "07:00",
+      "mode": "news",
+      "channel": "facebook+youtube",
+      "slug": "quang-cao-vi-pham-viet-nam",
+      "topic": "Bo Van hoa, The thao va Du lich cong bo ket qua xu ly vi pham quang cao tren mang 6 thang dau nam 2026 - chan 494 ten mien vi pham, thu hoi 65 giay phep mang xa hoi, xu phat 1 doanh nghiep + 3 nguoi anh huong tong 105 trieu dong, yeu cau Google/Meta/TikTok co trach nhiem go quang cao vi pham; tu 7/2026 quang cao dung tu nhat/duy nhat/tot nhat phai co bang chung - kem goc nhin rieng ve tuan thu quang cao som la loi the canh tranh cho doanh nghiep vua va nho (news mode)",
+      "facebook_post_id": "122227497560506640",
+      "facebook_video_id": "1543875977543688",
+      "youtube_video_id": "B6F1SL0Vwg4",
+      "youtube_url": "https://youtube.com/shorts/B6F1SL0Vwg4",
       "status": "published"
     }
   ],
